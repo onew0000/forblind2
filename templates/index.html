@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>스마트 지팡이</title>
+    <link rel="icon" type="image/x-icon" href="./static/sym_mark.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #c084fc 0%, #8b5cf6 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .status-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 30px;
+            width: 90%;
+            max-width: 340px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .status-dot {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background-color: #4ade80;
+            margin: 0 auto 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-dot::after {
+            content: '';
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
+            70% {
+                transform: scale(1.1);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(0.95);
+                opacity: 0;
+            }
+        }
+
+        .distance-value {
+            font-size: 36px;
+            color: white;
+            font-weight: 600;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 10px;
+        }
+
+        .start-button {
+            background-color: white;
+            color: #8b5cf6;
+            border: none;
+            padding: 18px 48px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 340px;
+        }
+
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .start-button:active {
+            transform: translateY(1px);
+        }
+
+        .status-label {
+            color: white;
+            font-size: 16px;
+            margin-top: 10px;
+            opacity: 0.9;
+        }
+
+        .vibration-status {
+            color: white;
+            font-size: 14px;
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="status-container">
+            <div class="status-dot">
+                <span id="distance" class="distance-value">-- cm</span>
+            </div>
+            <div id="status-label" class="status-label">대기 중</div>
+            <div id="vibration-status" class="vibration-status"></div>
+        </div>
+
+        <button class="start-button" onclick="toggleDetection()">탐지 시작</button>
+    </div>
+
+    <script>
+        let isDetecting = false;
+        let updateInterval;
+        let lastVibration = 0;
+        const VIBRATION_COOLDOWN = 1000; // 진동 간격 (1초)
+
+        // 진동 지원 여부 확인
+        function checkVibrationSupport() {
+            if ('vibrate' in navigator) {
+                document.getElementById('vibration-status').textContent = '진동 지원됨';
+                return true;
+            } else {
+                document.getElementById('vibration-status').textContent = '이 기기는 진동을 지원하지 않습니다';
+                return false;
+            }
+        }
+
+        // 거리에 따른 진동 패턴 실행
+        function vibrateByDistance(distance) {
+            const now = Date.now();
+            if (now - lastVibration < VIBRATION_COOLDOWN) return;
+            
+            if ('vibrate' in navigator) {
+                if (distance <= 10) {
+                    // 매우 가까움: 강한 3번 진동
+                    navigator.vibrate([200, 100, 200, 100, 200]);
+                } else if (distance <= 20) {
+                    // 가까움: 중간 2번 진동
+                    navigator.vibrate([150, 100, 150]);
+                } else if (distance <= 30) {
+                    // 주의: 약한 1번 진동
+                    navigator.vibrate([100]);
+                }
+                lastVibration = now;
+            }
+        }
+
+        function toggleDetection() {
+            const button = document.querySelector('.start-button');
+            const statusLabel = document.getElementById('status-label');
+            
+            if (!isDetecting) {
+                button.textContent = '탐지 중지';
+                button.style.backgroundColor = 'white';
+                button.style.color = '#dc2626';
+                statusLabel.textContent = '탐지 중...';
+                checkVibrationSupport();
+                startDetection();
+            } else {
+                button.textContent = '탐지 시작';
+                button.style.backgroundColor = 'white';
+                button.style.color = '#8b5cf6';
+                statusLabel.textContent = '대기 중';
+                stopDetection();
+            }
+            isDetecting = !isDetecting;
+        }
+
+        function startDetection() {
+            updateInterval = setInterval(updateDistance, 500);
+        }
+
+        function stopDetection() {
+            clearInterval(updateInterval);
+            document.getElementById('distance').textContent = '-- cm';
+            const statusDot = document.querySelector('.status-dot');
+            statusDot.style.backgroundColor = '#4ade80';
+            statusDot.style.boxShadow = '0 0 20px rgba(74, 222, 128, 0.4)';
+            if ('vibrate' in navigator) {
+                navigator.vibrate(0); // 진동 중지
+            }
+        }
+
+        function updateDistance() {
+            fetch('/get_distance')
+                .then(response => response.json())
+                .then(data => {
+                    const distance = data.distance;
+                    document.getElementById('distance').textContent = `${distance} cm`;
+                    
+                    const statusDot = document.querySelector('.status-dot');
+                    const statusLabel = document.getElementById('status-label');
+                    
+                    if (distance <= 10) {
+                        statusDot.style.backgroundColor = '#dc2626';
+                        statusDot.style.boxShadow = '0 0 20px rgba(220, 38, 38, 0.4)';
+                        statusLabel.textContent = '매우 가까움!';
+                        vibrateByDistance(distance);
+                    } else if (distance <= 20) {
+                        statusDot.style.backgroundColor = '#f59e0b';
+                        statusDot.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.4)';
+                        statusLabel.textContent = '가까움';
+                        vibrateByDistance(distance);
+                    } else if (distance <= 30) {
+                        statusDot.style.backgroundColor = '#3b82f6';
+                        statusDot.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.4)';
+                        statusLabel.textContent = '주의';
+                        vibrateByDistance(distance);
+                    } else {
+                        statusDot.style.backgroundColor = '#4ade80';
+                        statusDot.style.boxShadow = '0 0 20px rgba(74, 222, 128, 0.4)';
+                        statusLabel.textContent = '안전 거리';
+                    }
+                });
+        }
+
+        window.addEventListener('load', checkVibrationSupport);
+    </script>
+</body>
+</html>
